@@ -21,7 +21,14 @@ logger = logging.getLogger(__name__)
 LANGS = {
     'ar': {
         'welcome': 'مرحبًا بك في قائمة المهام! استخدم القائمة أدناه للتنقل.',
-        'available_commands': 'الأوامر المتاحة:',
+'available_commands': '''🌟 الأوامر المتاحة:
+
+\u200F✅ /add - إضافة مهمة جديدة
+\u200F📋 /list - عرض جميع المهام
+\u200F🌐 /lang - تغيير لغة البوت
+\u200F❓ /help - عرض معلومات المساعدة
+
+\u200F🔽 يمكنك استخدام هذه الأوامر أو الأزرار أدناه للتنقل 🔽''',
         'add_new_task': 'إضافة مهمة جديدة',
         'list_all_tasks': 'عرض جميع المهام',
         'help_add': 'استخدم زر "إضافة مهمة" لإضافة مهمة جديدة.',
@@ -63,7 +70,14 @@ LANGS = {
     },
     'en': {
         'welcome': 'Welcome to your ToDo list! Use the menu below to navigate.',
-        'available_commands': 'Available commands:',
+'available_commands': '''🌟 Available commands:
+
+✅ /add - Add a new task
+📋 /list - List all tasks
+🌐 /lang - Change the bot's language
+❓ /help - Display help information
+
+🔽 You can use these commands or the buttons below to navigate 🔽''',
         'add_new_task': 'Add a new task',
         'list_all_tasks': 'List all tasks',
         'help_add': 'Use the "Add Task" button to add a new task.',
@@ -113,6 +127,7 @@ def setup_database():
     CREATE TABLE IF NOT EXISTS tasks
     (id INTEGER PRIMARY KEY AUTOINCREMENT,
      user_id INTEGER,
+     chat_id INTEGER,
      task TEXT,
      details TEXT,
      status TEXT,
@@ -163,17 +178,21 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(help_text)
 
 async def add_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # if update.effective_chat.type != 'private':
+    #     await update.message.reply_text("This command can only be used in private chats.")
+    #     return
     user_id = update.effective_user.id
     lang = get_user_language(user_id)
     await update.message.reply_text(LANGS[lang]['enter_task'])
-    context.user_data['awaiting_task'] = True
+    context.chat_data['awaiting_task'] = True
 
 async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
     lang = get_user_language(user_id)
     conn = sqlite3.connect('todo.db')
     cursor = conn.cursor()
-    cursor.execute('SELECT id, task, status FROM tasks WHERE user_id = ? AND status != "completed"', (user_id,))
+    cursor.execute('SELECT id, task, status FROM tasks WHERE user_id = ? AND chat_id = ? AND status != "completed"', (user_id, chat_id))
     tasks = cursor.fetchall()
     conn.close()
 
@@ -223,7 +242,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         cursor.execute('SELECT details FROM tasks WHERE id = ?', (task_id,))
         details = cursor.fetchone()[0]
         await query.message.reply_text(LANGS[lang]['enter_details'])
-        context.user_data['awaiting_details'] = task_id
+        context.chat_data['awaiting_details'] = task_id
     elif action == 'view':
         cursor.execute('SELECT details FROM tasks WHERE id = ?', (task_id,))
         details = cursor.fetchone()[0]
@@ -235,8 +254,6 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     conn.commit()
     conn.close()
 
-    # Refresh the task list
-    await list_tasks(update, context)
 
 async def language_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -256,6 +273,7 @@ async def language_button_click(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def receive_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
     lang = get_user_language(user_id)
     text = update.message.text
 
@@ -267,25 +285,25 @@ async def receive_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await language_menu(update, context)
     elif text == LANGS[lang]['menu']['help']:
         await help_command(update, context)
-    elif 'awaiting_task' in context.user_data and context.user_data['awaiting_task']:
+    elif 'awaiting_task' in context.chat_data and context.chat_data['awaiting_task']:
         task = text
         conn = sqlite3.connect('todo.db', detect_types=sqlite3.PARSE_DECLTYPES)
         cursor = conn.cursor()
-        cursor.execute('INSERT INTO tasks (user_id, task, status, created_at) VALUES (?, ?, ?, ?)',
-                       (user_id, task, 'pending', datetime.now()))
+        cursor.execute('INSERT INTO tasks (user_id, chat_id, task, status, created_at) VALUES (?, ?, ?, ?, ?)',
+                       (user_id, chat_id, task, 'pending', datetime.now()))
         conn.commit()
         conn.close()
-        del context.user_data['awaiting_task']
+        del context.chat_data['awaiting_task']
         await update.message.reply_text(LANGS[lang]['task_added'])
-    elif 'awaiting_details' in context.user_data:
-        task_id = context.user_data['awaiting_details']
+    elif 'awaiting_details' in context.chat_data:
+        task_id = context.chat_data['awaiting_details']
         details = text
         conn = sqlite3.connect('todo.db')
         cursor = conn.cursor()
         cursor.execute('UPDATE tasks SET details = ? WHERE id = ?', (details, task_id))
         conn.commit()
         conn.close()
-        del context.user_data['awaiting_details']
+        del context.chat_data['awaiting_details']
         await update.message.reply_text(LANGS[lang]['details_added'])
 
 def main() -> None:
