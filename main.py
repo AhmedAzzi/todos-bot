@@ -1,4 +1,6 @@
 import logging
+import os
+from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 import sqlite3
@@ -307,7 +309,13 @@ async def receive_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(LANGS[lang]['details_added'])
 
 def main() -> None:
-    application = Application.builder().token('7334709119:AAGOeczOyD2BAjLMaIMIOEapbYe_rrH043Q').build()
+    load_dotenv()
+    token = os.getenv("BOT_TOKEN")
+    if not token:
+        print("Error: BOT_TOKEN environment variable is not set.")
+        return
+
+    application = Application.builder().token(token).build()
 
     # Set up database
     setup_database()
